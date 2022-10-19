@@ -1,0 +1,29 @@
+{
+  "pluginAlias": "Velux-Active",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Control windows and blinds directly from homebridge",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Velux-Bridge",
+        "required": true
+      },
+      "username": {
+        "title": "Velux Username",
+        "type": "string",
+        "required": true,
+        "description": "Email address for your velux account (to retrieve api key)"
+      },
+      "password": {
+        "title": "Velux Password",
+        "type": "string",
+        "required": true,
+        "description": "Password for your velux account"
+      }
+    }
+  }
+}
