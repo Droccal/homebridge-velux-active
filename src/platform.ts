@@ -9,8 +9,7 @@ import {
 } from 'homebridge'
 import fetch from 'node-fetch'
 import {PLATFORM_NAME, PLUGIN_NAME} from './settings'
-import {WindowAccessory} from './WindowAccessory'
-import {ShutterAccessory} from './ShutterAccessory'
+import {VeluxAccessory} from './VeluxAccessory'
 import {VeluxDevice} from './VeluxDevice'
 
 export class VeluxActivePlatform implements DynamicPlatformPlugin {
@@ -49,7 +48,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
                         success = await this.retrieveDevices()
                     }
                 }
-                retries++
+                retries = retries + 1
             } while (!success && retries >= 3)
             this.createDevices()
         })
@@ -81,6 +80,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
             this.refreshToken = result.data.refresh_token
             this.lastTokenRefresh = new Date()
             this.tokenWillExpire = new Date(this.lastTokenRefresh + result.data.expires_in)
+
             this.log.info('Successfully retrieved api token')
 
             return true
@@ -110,7 +110,8 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
             this.refreshToken = result.data.refresh_token
             this.lastTokenRefresh = new Date()
             this.tokenWillExpire = new Date(this.lastTokenRefresh + result.data.expires_in)
-            this.log.info('Successfully refreshed token')
+
+            this.log.debug('Successfully refreshed token')
 
             return true
         } catch (e) {
@@ -121,7 +122,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
     async retrieveHomeId () {
         try {
-            const response = await fetch(this.baseUrl + '/api/gethomedata', {
+            const response = await fetch(this.baseUrl + 'api/gethomedata', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -143,7 +144,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
     async retrieveDevices () {
         try {
             await this.retrieveNewToken()
-            const response = await fetch(this.baseUrl + '/api/homestatus', {
+            const response = await fetch(this.baseUrl + 'api/homestatus', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -152,10 +153,9 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
             })
             const result = await response.json()
-
             this.devices = result.data.home.modules.filter(m => m.type === 'NXO')
 
-            this.log.info('Successfully retrieved devices from velux')
+            this.log.debug('Successfully retrieved devices from velux')
 
             return true
         } catch (e) {
@@ -172,25 +172,15 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
             if (existingAccessory) {
                 this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName)
 
-                if (d.velux_type === 'window') {
-                    // eslint-disable-next-line no-new
-                    new WindowAccessory(this, existingAccessory, d)
-                } else if (d.velux_type === 'shutter') {
-                    // eslint-disable-next-line no-new
-                    new ShutterAccessory(this, existingAccessory, d)
-                }
+                // eslint-disable-next-line no-new
+                new VeluxAccessory(this, existingAccessory, d)
             } else {
                 this.log.info('Adding new accessory:', d.id)
                 // eslint-disable-next-line new-cap
                 const accessory = new this.api.platformAccessory(d.id, uuid)
 
-                if (d.velux_type === 'window') {
-                    // eslint-disable-next-line no-new
-                    new WindowAccessory(this, accessory, d)
-                } else if (d.velux_type === 'shutter') {
-                    // eslint-disable-next-line no-new
-                    new ShutterAccessory(this, accessory, d)
-                }
+                // eslint-disable-next-line no-new
+                new VeluxAccessory(this, accessory, d)
                 this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
             }
         })

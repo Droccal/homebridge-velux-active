@@ -4,22 +4,30 @@ import {VeluxActivePlatform} from './platform'
 import {VeluxDevice} from './VeluxDevice'
 import fetch from 'node-fetch'
 
-export class WindowAccessory {
-    private service: Service
+export class VeluxAccessory {
+    private service: Service | undefined
 
     constructor (
       private readonly platform: VeluxActivePlatform,
       private readonly accessory: PlatformAccessory,
       private readonly device: VeluxDevice
     ) {
-        this.platform.log.info('Initializing Velux Window')
+        this.platform.log.info(`Initializing Velux ${device.velux_type}`)
         this.accessory.getService(this.platform.Service.AccessoryInformation)!
             .setCharacteristic(this.platform.Characteristic.Manufacturer, device.manufacturer)
             .setCharacteristic(this.platform.Characteristic.Model, device.velux_type)
             .setCharacteristic(this.platform.Characteristic.SerialNumber, device.id)
 
         // create a new Window Covering service
-        this.service = this.accessory.getService(this.platform.Service.Window) || this.accessory.addService(this.platform.Service.Window)
+        if (device.velux_type === 'window') {
+            this.service = this.accessory.getService(this.platform.Service.Window) || this.accessory.addService(this.platform.Service.Window)
+        } else if (device.velux_type === 'shutter') {
+            this.service = this.accessory.getService(this.platform.Service.WindowCovering) || this.accessory.addService(this.platform.Service.WindowCovering)
+        } else {
+            this.platform.log.error('Not supported device type discovered')
+            return
+        }
+        this.service.setCharacteristic(this.platform.Characteristic.Name, 'Velux ' + device.velux_type === 'window' ? 'Window' : 'Shutter')
 
         // create handlers for required characteristics
         this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition)
@@ -60,32 +68,39 @@ export class WindowAccessory {
     /**
      * Handle requests to set the "Target Position" characteristic
      */
-    async handleTargetPositionSet (value) {
+    handleTargetPositionSet (value) {
+        if (value > 100 || value < 0) {
+            this.platform.log.error('Invalid value for target position')
+            return
+        }
+
         this.platform.log.debug('Triggered SET TargetPosition:', value)
         try {
-            await this.platform.retrieveNewToken()
-            const response = await fetch(this.platform.baseUrl + '/syncapi/v1/setstate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json; charset=utf-8',
-                    Authorization: `Bearer ${this.platform.apiToken}`
-                },
-                body: JSON.stringify({
-                    home: {
-                        id: this.platform.homeId,
-                        modules: [
-                            {
-                                bridge: this.device.bridge,
-                                id: this.device.id,
-                                target_position: value
-                            }
-                        ]
-                    }
+            this.platform.retrieveNewToken().then(async () => {
+                const response = await fetch(this.platform.baseUrl + 'syncapi/v1/setstate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=utf-8',
+                        Authorization: `Bearer ${this.platform.apiToken}`
+                    },
+                    body: JSON.stringify({
+                        home: {
+                            id: this.platform.homeId,
+                            modules: [
+                                {
+                                    bridge: this.device.bridge,
+                                    id: this.device.id,
+                                    target_position: value
+                                }
+                            ]
+                        }
+                    })
                 })
-            })
-            const result = await response.json()
+                const result = await response.json()
 
-            this.platform.log.debug(`Target position set. Success: ${result.data.status}`)
+                this.platform.log.debug(`Target position set. Success: ${result.data.status}`)
+                await this.platform.retrieveDevices()
+            })
         } catch (e) {
             this.platform.log.error(`Could not set position for device: ${this.device.id}`, e)
         }
