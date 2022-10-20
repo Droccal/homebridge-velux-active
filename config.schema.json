@@ -6,6 +6,11 @@
   "schema": {
     "type": "object",
     "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Velux-Bridge"
+      },
       "username": {
         "title": "Velux Username",
         "type": "string",

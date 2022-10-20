@@ -45,13 +45,32 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
                 if (retrievedApiKey) {
                     const retrievedHome = await this.retrieveHomeId()
                     if (retrievedHome) {
-                        success = await this.retrieveDevices()
+                        success = await this.retrieveDevicesStatus()
                     }
                 }
+                await this.delay(5000)
                 retries = retries + 1
-            } while (!success && retries >= 3)
+            } while (!success && retries <= 3)
             this.createDevices()
+
+            setInterval(async () => {
+                await this.retrieveDevicesStatus()
+            }, 10000)
         })
+    }
+
+    delay (ms: number) {
+        return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
+    async setTokens (response: any) {
+        const result = await response.json()
+        this.apiToken = result.access_token
+        this.refreshToken = result.refresh_token
+        this.lastTokenRefresh = new Date()
+        this.tokenWillExpire = new Date()
+        this.tokenWillExpire.setSeconds(this.tokenWillExpire.getSeconds() + result.expires_in)
+        this.log.info('Token will expire: ' + this.tokenWillExpire)
     }
 
     configureAccessory (accessory: PlatformAccessory) {
@@ -60,6 +79,12 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
     }
 
     async retrieveApiKey (username: string, password: string): Promise<boolean> {
+        if (this.tokenWillExpire !== undefined && Math.abs(this.tokenWillExpire?.getTime() - new Date().getTime()) > 0) {
+            this.log.debug('Token still valid')
+            return true
+        }
+
+        this.log.info('Getting new token')
         try {
             const encoded = encodeURIComponent(username)
             const response = await fetch(this.baseUrl + 'oauth2/token', {
@@ -75,12 +100,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
                 return false
             }
 
-            const result = await response.json()
-            this.apiToken = result.data.access_token
-            this.refreshToken = result.data.refresh_token
-            this.lastTokenRefresh = new Date()
-            this.tokenWillExpire = new Date(this.lastTokenRefresh + result.data.expires_in)
-
+            await this.setTokens(response)
             this.log.info('Successfully retrieved api token')
 
             return true
@@ -105,12 +125,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
                 body: `grant_type=refresh_token&refresh_token=${this.refreshToken}&client_id=${this.clientId}&client_secret=${this.clientSecret}`
 
             })
-            const result = await response.json()
-            this.apiToken = result.data.access_token
-            this.refreshToken = result.data.refresh_token
-            this.lastTokenRefresh = new Date()
-            this.tokenWillExpire = new Date(this.lastTokenRefresh + result.data.expires_in)
-
+            await this.setTokens(response)
             this.log.debug('Successfully refreshed token')
 
             return true
@@ -131,17 +146,17 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
             })
             const result = await response.json()
-            this.homeId = result.data.home.id
+            this.homeId = result.body.homes[0].id
             this.log.info('Successfully retrieved home id')
 
             return true
         } catch (e) {
-            this.log.error('Could not retrieve home id, retrying')
+            this.log.error('Could not retrieve home id')
             return false
         }
     }
 
-    async retrieveDevices () {
+    async retrieveDevicesStatus () {
         try {
             await this.retrieveNewToken()
             const response = await fetch(this.baseUrl + 'api/homestatus', {
@@ -153,7 +168,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
             })
             const result = await response.json()
-            this.devices = result.data.home.modules.filter(m => m.type === 'NXO')
+            this.devices = result.body.home.modules.filter(m => m.type === 'NXO')
 
             this.log.debug('Successfully retrieved devices from velux')
 

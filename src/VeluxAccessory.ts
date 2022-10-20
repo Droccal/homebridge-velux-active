@@ -27,6 +27,9 @@ export class VeluxAccessory {
             this.platform.log.error('Not supported device type discovered')
             return
         }
+        this.service.name = device.id
+        this.service.displayName = device.id
+
         this.service.setCharacteristic(this.platform.Characteristic.Name, 'Velux ' + device.velux_type === 'window' ? 'Window' : 'Shutter')
 
         // create handlers for required characteristics
@@ -90,7 +93,9 @@ export class VeluxAccessory {
                                 {
                                     bridge: this.device.bridge,
                                     id: this.device.id,
-                                    target_position: value
+                                    target_position: value,
+                                    nonce: 0,
+                                    timestamp: new Date().getTime()
                                 }
                             ]
                         }
@@ -98,8 +103,8 @@ export class VeluxAccessory {
                 })
                 const result = await response.json()
 
-                this.platform.log.debug(`Target position set. Success: ${result.data.status}`)
-                await this.platform.retrieveDevices()
+                this.platform.log.debug(`Target position set. Success: ${result.status}`)
+                await this.platform.retrieveDevicesStatus()
             })
         } catch (e) {
             this.platform.log.error(`Could not set position for device: ${this.device.id}`, e)
