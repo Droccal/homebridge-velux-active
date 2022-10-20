@@ -55,7 +55,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
             setInterval(async () => {
                 await this.retrieveDevicesStatus()
-            }, 10000)
+            }, 5000)
         })
     }
 

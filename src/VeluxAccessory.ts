@@ -20,17 +20,17 @@ export class VeluxAccessory {
 
         // create a new Window Covering service
         if (device.velux_type === 'window') {
-            this.service = this.accessory.getService(this.platform.Service.Window) || this.accessory.addService(this.platform.Service.Window)
+            this.service = this.accessory.getService(this.platform.Service.Window) ||
+              this.accessory.addService(this.platform.Service.Window, `Window ${device.id}`, 'cl9gre9tm0000rj664gpx42pf')
         } else if (device.velux_type === 'shutter') {
-            this.service = this.accessory.getService(this.platform.Service.WindowCovering) || this.accessory.addService(this.platform.Service.WindowCovering)
+            this.service = this.accessory.getService(this.platform.Service.WindowCovering) ||
+              this.accessory.addService(this.platform.Service.WindowCovering, `Shutter ${device.id}`, 'cl9grh82v0001rj66tq1fgtta')
         } else {
             this.platform.log.error('Not supported device type discovered')
             return
         }
-        this.service.name = device.id
-        this.service.displayName = device.id
 
-        this.service.setCharacteristic(this.platform.Characteristic.Name, 'Velux ' + device.velux_type === 'window' ? 'Window' : 'Shutter')
+        this.service.setCharacteristic(this.platform.Characteristic.Name, (`Velux  ${device.velux_type === 'window' ? 'Window' : 'Shutter'} ${device.id}`))
 
         // create handlers for required characteristics
         this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition)
@@ -44,12 +44,17 @@ export class VeluxAccessory {
             .onSet(this.handleTargetPositionSet.bind(this))
     }
 
+    getUpdatedState (id: string) {
+        const state = this.platform.devices.find(f => f.id === id)
+        return state ?? this.device
+    }
+
     /**
      * Handle requests to get the current value of the "Current Position" characteristic
      */
     handleCurrentPositionGet () {
         this.platform.log.debug('Triggered GET CurrentPosition')
-        return this.device.current_position
+        return this.getUpdatedState(this.device.id).current_position
     }
 
     /**
@@ -57,6 +62,11 @@ export class VeluxAccessory {
      */
     handlePositionStateGet () {
         this.platform.log.debug('Triggered GET PositionState')
+        if (this.getUpdatedState(this.device.id).current_position < this.getUpdatedState(this.device.id).target_position) {
+            return this.platform.Characteristic.PositionState.INCREASING
+        } else if (this.getUpdatedState(this.device.id).current_position > this.getUpdatedState(this.device.id).target_position) {
+            return this.platform.Characteristic.PositionState.DECREASING
+        }
         return this.platform.Characteristic.PositionState.STOPPED
     }
 
@@ -65,7 +75,7 @@ export class VeluxAccessory {
      */
     handleTargetPositionGet () {
         this.platform.log.debug('Triggered GET TargetPosition')
-        return this.device.target_position
+        return this.getUpdatedState(this.device.id).target_position
     }
 
     /**
