@@ -1,0 +1,42 @@
+.DS_Store
+node_modules
+/dist
+/tools
+/coverage
+/logs
+# This folder should be ignored since the script initializeTokenMasterGateway.mjs creates one which includes secrets
+temp
+
+# local env files
+.env.local
+.envrc
+.env.*.local
+cypress.env.json
+tokenmaster.env.json
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.iml
+
+cypress
+auditresult.json
+
+sandbox
+
+.pm2.log
+junit.xml
+
+vue-demo-extension-mic-portal-core.json
+test-user-cert.pfx
