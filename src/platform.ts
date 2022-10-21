@@ -28,6 +28,9 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
     public devices: VeluxDevice[] = []
     public lastTokenRefresh: Date | undefined = undefined
     public tokenWillExpire: Date | undefined = undefined
+    public lastDeviceUpdate: Date | undefined = undefined
+
+    private refreshing = false
 
     constructor (
     public readonly log: Logger,
@@ -51,11 +54,8 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
                 await this.delay(5000)
                 retries = retries + 1
             } while (!success && retries <= 3)
+            this.log.info('Init complete, creating devices')
             this.createDevices()
-
-            setInterval(async () => {
-                await this.retrieveDevicesStatus()
-            }, 5000)
         })
     }
 
@@ -70,7 +70,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
         this.lastTokenRefresh = new Date()
         this.tokenWillExpire = new Date()
         this.tokenWillExpire.setSeconds(this.tokenWillExpire.getSeconds() + result.expires_in)
-        this.log.info('Token will expire: ' + this.tokenWillExpire)
+        this.log.info('Token will expire: ', this.tokenWillExpire)
     }
 
     configureAccessory (accessory: PlatformAccessory) {
@@ -79,12 +79,12 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
     }
 
     async retrieveApiKey (username: string, password: string): Promise<boolean> {
-        if (this.tokenWillExpire !== undefined && Math.abs(this.tokenWillExpire?.getTime() - new Date().getTime()) > 0) {
-            this.log.debug('Token still valid')
+        if (this.tokenWillExpire !== undefined && (this.tokenWillExpire?.getTime() - new Date().getTime()) > 0) {
+            this.log.debug('Token still valid', new Date(), this.tokenWillExpire, (this.tokenWillExpire?.getTime() - new Date().getTime()) > 0)
             return true
         }
 
-        this.log.info('Getting new token')
+        this.log.debug('Getting new token')
         try {
             const encoded = encodeURIComponent(username)
             const response = await fetch(this.baseUrl + 'oauth2/token', {
@@ -111,8 +111,8 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
     }
 
     async retrieveNewToken () {
-        if (this.tokenWillExpire !== undefined && Math.abs(this.tokenWillExpire?.getTime() - new Date().getTime()) > 0) {
-            this.log.debug('Token still valid')
+        if (this.tokenWillExpire !== undefined && (this.tokenWillExpire?.getTime() - new Date().getTime()) > 0) {
+            this.log.debug('Token still valid', new Date(), this.tokenWillExpire, (this.tokenWillExpire?.getTime() - new Date().getTime()) > 0)
             return true
         }
 
@@ -126,7 +126,7 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
             })
             await this.setTokens(response)
-            this.log.debug('Successfully refreshed token')
+            this.log.info('Successfully refreshed token')
 
             return true
         } catch (e) {
@@ -156,9 +156,22 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
         }
     }
 
-    async retrieveDevicesStatus () {
+    async retrieveDevicesStatus (delayTime = 2000) {
+        if (this.refreshing) {
+            this.log.debug('already refreshing state')
+            await this.delay(500) // wait for the update
+            return true
+        }
+
+        if (this.lastDeviceUpdate !== undefined && (new Date().getTime() - this.lastDeviceUpdate.getTime() < delayTime)) {
+            this.log.debug('Using cached state as it is not older than 2s')
+            return true
+        }
+
+        this.refreshing = true
         try {
             await this.retrieveNewToken()
+            this.lastDeviceUpdate = new Date()
             const response = await fetch(this.baseUrl + 'api/homestatus', {
                 method: 'POST',
                 headers: {
@@ -168,14 +181,17 @@ export class VeluxActivePlatform implements DynamicPlatformPlugin {
 
             })
             const result = await response.json()
+            this.log.debug('Got devices status', result)
             this.devices = result.body.home.modules.filter(m => m.type === 'NXO')
 
             this.log.debug('Successfully retrieved devices from velux')
 
             return true
         } catch (e) {
-            this.log.error('Could not retrieve devices from velux')
+            this.log.error('Could not retrieve devices from velux', e)
             return false
+        } finally {
+            this.refreshing = false
         }
     }
 

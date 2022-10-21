@@ -44,7 +44,8 @@ export class VeluxAccessory {
             .onSet(this.handleTargetPositionSet.bind(this))
     }
 
-    getUpdatedState (id: string) {
+    async getUpdatedState (id: string, delayTime = 2000) {
+        await this.platform.retrieveDevicesStatus(delayTime)
         const state = this.platform.devices.find(f => f.id === id)
         return state ?? this.device
     }
@@ -52,19 +53,21 @@ export class VeluxAccessory {
     /**
      * Handle requests to get the current value of the "Current Position" characteristic
      */
-    handleCurrentPositionGet () {
+    async handleCurrentPositionGet () {
         this.platform.log.debug('Triggered GET CurrentPosition')
-        return this.getUpdatedState(this.device.id).current_position
+        const veluxDevice = await this.getUpdatedState(this.device.id)
+        return veluxDevice.current_position
     }
 
     /**
      * Handle requests to get the current value of the "Position State" characteristic
      */
-    handlePositionStateGet () {
+    async handlePositionStateGet () {
         this.platform.log.debug('Triggered GET PositionState')
-        if (this.getUpdatedState(this.device.id).current_position < this.getUpdatedState(this.device.id).target_position) {
+        const veluxDevice = await this.getUpdatedState(this.device.id)
+        if (veluxDevice.current_position < veluxDevice.target_position) {
             return this.platform.Characteristic.PositionState.INCREASING
-        } else if (this.getUpdatedState(this.device.id).current_position > this.getUpdatedState(this.device.id).target_position) {
+        } else if (veluxDevice.current_position > veluxDevice.target_position) {
             return this.platform.Characteristic.PositionState.DECREASING
         }
         return this.platform.Characteristic.PositionState.STOPPED
@@ -73,9 +76,10 @@ export class VeluxAccessory {
     /**
      * Handle requests to get the current value of the "Target Position" characteristic
      */
-    handleTargetPositionGet () {
+    async handleTargetPositionGet () {
         this.platform.log.debug('Triggered GET TargetPosition')
-        return this.getUpdatedState(this.device.id).target_position
+        const veluxDevice = await this.getUpdatedState(this.device.id)
+        return veluxDevice.target_position
     }
 
     /**
@@ -113,8 +117,13 @@ export class VeluxAccessory {
                 })
                 const result = await response.json()
 
-                this.platform.log.debug(`Target position set. Success: ${result.status}`)
-                await this.platform.retrieveDevicesStatus()
+                this.platform.log.info(`Target position set to ${value}. Success: ${result.status}`)
+
+                let veluxDevice: VeluxDevice
+                do {
+                    veluxDevice = await this.getUpdatedState(this.device.id, 500)
+                    await this.platform.delay(1000)
+                } while (veluxDevice.current_position !== veluxDevice.target_position)
             })
         } catch (e) {
             this.platform.log.error(`Could not set position for device: ${this.device.id}`, e)
